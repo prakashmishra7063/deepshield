@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>DeepShield AI — Options</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="options">
+    <h1>🛡 DeepShield <span class="accent">AI</span> — Options</h1>
+    <form id="form">
+      <label>API address<input id="apiBase" type="url" required placeholder="https://api.deepshield.example" /></label>
+      <label>Dashboard address<input id="appBase" type="url" required placeholder="https://app.deepshield.example" /></label>
+      <label>API token
+        <input id="token" type="password" autocomplete="off" placeholder="dsk_…" />
+        <span class="muted small">Create one in DeepShield → Settings → API tokens. It's stored only in this browser profile.</span>
+      </label>
+      <label>Show a warning on the page when a result is at least
+        <select id="warnLevel">
+          <option value="high_risk">High Risk — Possible Deepfake</option>
+          <option value="potentially_manipulated">Potentially Manipulated</option>
+        </select>
+      </label>
+      <label class="check"><input id="hoverChips" type="checkbox" /> Show the “Scan” button when hovering over images and videos</label>
+      <label class="check"><input id="keepHistory" type="checkbox" /> Keep a local list of recent scans in this browser</label>
+      <div class="row">
+        <button class="btn primary" type="submit">Save</button>
+        <span id="msg" class="muted" role="status"></span>
+      </div>
+    </form>
+    <section>
+      <h2>Privacy</h2>
+      <ul class="muted small">
+        <li>The extension does nothing until you click a scan control. It doesn't read browsing history or scan pages in the background.</li>
+        <li>When you scan, only that media's URL and the page's URL are sent to your DeepShield server. Inline (blob/data) media is uploaded as a file.</li>
+        <li>Nothing is reported, flagged or deleted on any website automatically.</li>
+      </ul>
+    </section>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

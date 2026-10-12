@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: deepshield
+      POSTGRES_USER: deepshield
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deepshield"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    environment:
+      DS_ENV: production
+      DS_SECRET_KEY: ${DS_SECRET_KEY:?set DS_SECRET_KEY in .env}
+      DS_DATABASE_URL: postgresql+psycopg://deepshield:${POSTGRES_PASSWORD}@db:5432/deepshield
+      DS_CORS_ORIGINS: ${DS_CORS_ORIGINS:-http://localhost:3000}
+      DS_RETENTION_HOURS: ${DS_RETENTION_HOURS:-24}
+    volumes: [media:/data/storage]
+    depends_on:
+      db: { condition: service_healthy }
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    ports: ["127.0.0.1:8000:8000"]
+
+  web:
+    build:
+      context: ./frontend
+      args: { API_ORIGIN: http://api:8000 }
+    depends_on: [api]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    ports: ["127.0.0.1:3000:3000"]
+
+volumes:
+  pgdata:
+  media:

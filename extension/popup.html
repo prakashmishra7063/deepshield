@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>DeepShield AI</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="popup">
+    <header class="row">
+      <strong>🛡 DeepShield <span class="accent">AI</span></strong>
+      <a href="options.html" target="_blank" class="muted">Options</a>
+    </header>
+    <p id="status" class="muted">Checking connection…</p>
+    <button id="scan-page" class="btn primary" disabled>Check this page for impersonation</button>
+    <p class="muted small">To scan an image or video, hover over it and click <b>Scan</b>, or right-click it and choose <b>Scan with DeepShield</b>.</p>
+    <div id="result"></div>
+    <h2>Recent scans</h2>
+    <ul id="history"></ul>
+    <button id="clear" class="link">Clear local history</button>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
