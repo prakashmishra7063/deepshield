@@ -6,9 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import get_settings
-from .db import Base, engine
+from . import migrate
 from .ratelimit import client_ip, limiter
-from .routers import analyses, auth, cases, system
+from .routers import admin, analyses, auth, cases, orgs, system
 from .worker import jobs
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -16,10 +16,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = get_settings()
-    if settings.database_url.startswith("sqlite"):
-        # Dev convenience. Production runs `alembic upgrade head` (see docs/DEPLOYMENT.md).
-        Base.metadata.create_all(engine)
+    migrate.upgrade()
     jobs.start()
     yield
     jobs.stop()
@@ -63,7 +60,7 @@ async def security_headers(request: Request, call_next):
     return resp
 
 
-for r in (auth.router, analyses.router, cases.router, system.router):
+for r in (auth.router, orgs.router, analyses.router, cases.router, system.router, admin.router):
     app.include_router(r, prefix="/api/v1")
 
 

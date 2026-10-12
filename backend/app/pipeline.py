@@ -117,8 +117,8 @@ def process(analysis_id: str, enqueue=None) -> None:
                 page = parse_page(data, a.source_url or "")
                 ctx.cache["page"] = page
                 for kind, url in discover_media(page)[:MAX_EMBEDDED]:
-                    child = Analysis(user_id=a.user_id, source_type="url", source_url=url,
-                                     page_url=a.source_url, kind=kind, stage="Queued (embedded media)")
+                    child = Analysis(org_id=a.org_id, user_id=a.user_id, parent_id=a.id, source_type="url",
+                                     source_url=url, page_url=a.source_url, kind=kind, stage="Queued (embedded media)")
                     db.add(child)
                     db.flush()
                     embedded.append({"analysis_id": child.id, "url": url, "kind": kind})
@@ -168,7 +168,7 @@ def process(analysis_id: str, enqueue=None) -> None:
             a.kind = media.kind
             a.status, a.progress, a.stage, a.completed_at = "completed", 100, "Completed", utcnow()
             db.commit()
-            user = db.get(User, a.user_id)
+            user = db.get(User, a.user_id) if a.user_id else None
             if user:
                 maybe_alert(db, a, user)
         except UserFacingError as e:

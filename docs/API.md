@@ -11,9 +11,17 @@ Errors return `{"detail": "..."}`. Validation errors return the FastAPI list for
 ## Auth
 
 ```http
-POST /auth/register   {"email": "a@b.com", "password": "≥10 chars", "accept_terms": true}   → 201 User
+POST /auth/register   {"email": "a@b.com", "password": "≥10 chars", "accept_terms": true, "invite_token"?} → 201 Me
 POST /auth/login      {"email": "a@b.com", "password": "..."}  → {"access_token", "token_type", "expires_in"}
-GET  /auth/me         → User
+GET  /auth/me         → Me (role, email_verified, memberships[], active_org_id)
+POST /auth/verify-email        {"token"}                  (from the emailed link)
+POST /auth/resend-verification
+POST /auth/forgot-password     {"email"}                  → 204 always (no account enumeration)
+POST /auth/reset-password      {"token", "password"}      → signs out all sessions
+POST /auth/change-password     {"current_password", "new_password"} → new access token
+POST /auth/logout-everywhere
+DELETE /auth/me                {"password", "confirm": "DELETE"}
+POST /auth/switch-org          {"org_id"}
 PATCH /auth/me/settings {"alert_threshold": "potentially_manipulated|high_risk", "email_alerts": bool}
 GET  /auth/tokens     → [ApiToken]
 POST /auth/tokens     {"name": "Chrome"} → ApiToken + {"token": "dsk_…"}   (shown once)
@@ -57,6 +65,43 @@ See [ARCHITECTURE.md §4](ARCHITECTURE.md#analysis-result-shape-result_json). Ke
 | `platform` | Present when the URL belongs to a known social platform, with that integration's status |
 | `embedded_media[]` | Child analyses created for media found on a scanned web page |
 
+## Workspaces & plans
+
+Every request runs in the caller's **active workspace**. Analyses, cases and reports are scoped to it, and
+alerts belong to the individual user.
+
+```http
+GET  /plans                                → public plans (pricing)
+GET  /org                                  → active workspace: plan, usage {used, limit, credits}, members, invites
+PATCH /org  {"name"}                       (workspace admin)
+POST /orgs  {"name"}                       → create a team workspace and switch to it
+POST /org/invites {"email", "role": "member|admin"}   (admin; seat-limited) → emails an invite link
+DELETE /org/invites/{id}
+GET  /invites/{token}                      → preview (public)
+POST /invites/accept {"token"}             (signed in; email must match)
+PATCH /org/members/{user_id} {"role"}      (admin; only owners grant or remove owner)
+DELETE /org/members/{user_id}              (admin removes; anyone may remove themselves)
+```
+
+Scanning returns **402** when the monthly plan quota is used up and there are no credits left, **403** when email
+isn't verified (if required) or the workspace is suspended, and **413** above the plan's upload limit.
+
+## Owner console (platform owner only)
+
+```http
+GET  /admin/overview
+GET  /admin/users?q=&status=&page=          PATCH /admin/users/{id} {"status"?, "email_verified"?}
+POST /admin/users/{id}/revoke-sessions      POST /admin/users/{id}/send-reset
+POST /admin/users/{id}/make-owner           DELETE /admin/users/{id}
+GET  /admin/orgs?q=&plan_id=&page=          PATCH /admin/orgs/{id} {"plan_id"?, "status"?, "credits_delta"?, "scan_quota_override"?, "clear_quota_override"?}
+GET/POST /admin/plans                       PATCH /admin/plans/{id}
+GET/PATCH /admin/settings {"signups_open", "require_email_verification"}
+GET  /admin/audit?action=&user_id=&limit=
+```
+
+These endpoints return account and usage metadata only. There is no owner endpoint for reading customers'
+media, results or notes.
+
 ## Cases & alerts
 
 ```http
@@ -73,13 +118,11 @@ GET  /alerts?state=new|acknowledged|dismissed
 PATCH /alerts/{id}  {"state": "acknowledged|dismissed|new"}
 ```
 
-## System & admin
+## System
 
 ```http
 GET /system/health      → detectors with availability, queue depth, ffmpeg presence (no auth)
 GET /integrations       → integration registry with status
-GET /admin/audit?limit=&action=   (admin)
-GET /admin/stats                  (admin)
 ```
 
 ## Example

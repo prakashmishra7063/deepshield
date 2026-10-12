@@ -62,3 +62,12 @@ export function sourceLabel(a: { source_url: string | null; file_name: string | 
 export function prettify(s: string): string {
   return s.replace(/_/g, " ");
 }
+
+export function fmtMoney(cents: number, currency = "usd"): string {
+  if (cents === 0) return "Free";
+  return new Intl.NumberFormat(undefined, { style: "currency", currency: currency.toUpperCase(), maximumFractionDigits: cents % 100 ? 2 : 0 }).format(cents / 100);
+}
+
+export function fmtScans(n: number): string {
+  return n < 0 ? "Unlimited scans" : `${n.toLocaleString()} scans / month`;
+}

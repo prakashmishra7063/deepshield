@@ -2,19 +2,33 @@
 
 import { Eye, Fingerprint, ScanFace, Waves } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, type FormEvent } from "react";
 import { api, auth } from "@/lib/api";
 import { Logo, ThemeToggle } from "./AppShell";
 import { Button, ErrorNote, Field, inputCls } from "./ui";
 
 export default function AuthForm({ mode }: { mode: "login" | "register" }) {
   const router = useRouter();
+  const params = useSearchParams();
+  const inviteToken = params.get("invite");
+  const next = params.get("next");
+  const [invite, setInvite] = useState<{ org_name: string; email: string; role: string } | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [terms, setTerms] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!inviteToken) return;
+    api<{ org_name: string; email: string; role: string }>(`/invites/${encodeURIComponent(inviteToken)}`)
+      .then((i) => {
+        setInvite(i);
+        setEmail(i.email);
+      })
+      .catch((e) => setError(e.message));
+  }, [inviteToken]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -22,11 +36,17 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
     setBusy(true);
     try {
       if (mode === "register") {
-        await api("/auth/register", { method: "POST", json: { email, password, accept_terms: terms } });
+        await api("/auth/register", {
+          method: "POST",
+          json: { email, password, accept_terms: terms, invite_token: inviteToken || undefined },
+        });
       }
       const t = await api<{ access_token: string }>("/auth/login", { method: "POST", json: { email, password } });
       auth.set(t.access_token);
-      router.replace("/dashboard");
+      if (inviteToken && mode === "login") {
+        await api("/invites/accept", { method: "POST", json: { token: inviteToken } });
+      }
+      router.replace(next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -77,11 +97,23 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
         <div className="m-auto w-full max-w-sm">
           <h2 className="text-2xl font-semibold">{mode === "login" ? "Sign in" : "Create your account"}</h2>
           <p className="mt-1 text-sm text-muted">
-            {mode === "login" ? "Welcome back." : "The first account created becomes the administrator."}
+            {invite
+              ? `You've been invited to join "${invite.org_name}" as ${invite.role}.`
+              : mode === "login"
+                ? "Welcome back."
+                : "Start free. No card required."}
           </p>
           <form onSubmit={submit} className="mt-6 space-y-4">
             <Field label="Email">
-              <input className={inputCls} type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+              <input
+                className={inputCls}
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                readOnly={!!invite}
+                onChange={(e) => setEmail(e.target.value)}
+              />
             </Field>
             <Field label="Password" hint={mode === "register" ? "At least 10 characters." : undefined}>
               <input
@@ -106,6 +138,13 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
                 </span>
               </label>
             )}
+            {mode === "login" && (
+              <p className="text-right text-sm">
+                <Link href="/forgot-password" className="text-accent underline">
+                  Forgot password?
+                </Link>
+              </p>
+            )}
             <ErrorNote message={error} />
             <Button type="submit" className="w-full" loading={busy}>
               {mode === "login" ? "Sign in" : "Create account"}
@@ -115,14 +154,14 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
             {mode === "login" ? (
               <>
                 New to DeepShield?{" "}
-                <Link className="text-accent underline" href="/register">
+                <Link className="text-accent underline" href={inviteToken ? `/register?invite=${encodeURIComponent(inviteToken)}` : "/register"}>
                   Create an account
                 </Link>
               </>
             ) : (
               <>
                 Already registered?{" "}
-                <Link className="text-accent underline" href="/login">
+                <Link className="text-accent underline" href={inviteToken ? `/login?invite=${encodeURIComponent(inviteToken)}` : "/login"}>
                   Sign in
                 </Link>
               </>

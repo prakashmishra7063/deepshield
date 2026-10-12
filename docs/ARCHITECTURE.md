@@ -58,8 +58,9 @@ Design choices:
 ## 2. User flows
 
 ### 2.1 Register / log in
-1. User registers with email and password (scrypt-hashed). The first registered user
-   becomes `admin`; later users are `analyst`.
+1. User registers with email and password (scrypt-hashed) and gets a personal workspace on the
+   Free plan. A verification email must be confirmed before scanning. The first registered user
+   becomes the platform **owner**, with the owner console and an unlimited internal plan.
 2. Login returns a short-lived JWT access token. The SPA keeps it in memory plus
    `sessionStorage`.
 3. Users can mint **API tokens** (for the browser extension). Only a SHA-256 hash is stored.
@@ -111,11 +112,16 @@ See `backend/app/models.py` and the Alembic migration in
 
 | Table | Purpose | Key columns |
 |---|---|---|
-| `users` | Accounts | id, email (unique), password_hash, role (`admin`/`analyst`/`viewer`), alert_threshold, created_at |
+| `users` | Accounts | id, email (unique), password_hash, role (`owner` = platform owner / `user`), status, email_verified_at, token_version, active_org_id, alert_threshold |
+| `plans` | Products | id, name, monthly_scans (-1 = unlimited), max_upload_mb, max_members, price_monthly_cents, public |
+| `organizations` | Workspaces (`personal` / `team`) | id, name, kind, plan_id, status, credits, scan_quota_override |
+| `memberships` | User ↔ workspace | org_id, user_id, role (`owner`/`admin`/`member`) |
+| `invites` / `email_tokens` | Emailed single-use links (hash stored) | token_hash, expires_at, accepted_at / used_at |
+| `platform_settings` | Owner switches | signups_open, require_email_verification |
 | `api_tokens` | Extension and API access | id, user_id, name, token_hash, last_used_at, revoked |
 | `media_objects` | Stored originals | id, sha256, mime, kind (`image`/`video`/`audio`/`html`), size, storage_path, source_url, purged_at |
-| `analyses` | One scan | id (public `DS-…` id), user_id, media_id, source_url, page_url, status (`queued`/`running`/`completed`/`failed`), progress, stage, classification, synthetic_origin, likelihood (nullable, calibrated only), result_json, error, created_at, completed_at |
-| `cases` | Investigations | id, user_id, title, status, created_at, updated_at |
+| `analyses` | One scan (workspace-owned) | id (public `DS-…` id), org_id, user_id (creator), parent_id (embedded media), media_id, source_url, page_url, status (`queued`/`running`/`completed`/`failed`), progress, stage, classification, synthetic_origin, likelihood (nullable, calibrated only), result_json, error, created_at, completed_at |
+| `cases` | Investigations (workspace-owned) | id, org_id, user_id, title, status, created_at, updated_at |
 | `case_items` | Analyses in a case | case_id, analysis_id |
 | `case_notes` | Notes | id, case_id, user_id, body, created_at |
 | `alerts` | Notifications | id, user_id, analysis_id, level, title, state (`new`/`acknowledged`/`dismissed`), created_at |

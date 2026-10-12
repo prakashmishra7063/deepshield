@@ -25,6 +25,7 @@ class RegisterIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=10, max_length=256)
     accept_terms: bool = Field(description="Must accept the responsible-use terms")
+    invite_token: str | None = Field(default=None, max_length=200)
 
 
 class LoginIn(BaseModel):
@@ -174,3 +175,193 @@ class AuditOut(ORM):
     ip: str | None
     detail: dict | None
     created_at: UTCDateTime
+
+
+# ---------------------------------------------------------------- accounts & workspaces
+
+class MembershipOut(BaseModel):
+    org_id: int
+    name: str
+    kind: str
+    role: str
+    plan_id: str
+
+
+class MeOut(BaseModel):
+    id: int
+    email: str
+    role: str
+    status: str
+    email_verified: bool
+    alert_threshold: str
+    email_alerts: bool
+    created_at: UTCDateTime
+    active_org_id: int | None
+    memberships: list[MembershipOut]
+    require_email_verification: bool
+    # How this server delivers email: smtp (real inbox) | outbox (dev: saved to files) | disabled
+    email_delivery: str
+
+
+class TokenIn(BaseModel):
+    token: str = Field(min_length=10, max_length=200)
+
+
+class EmailIn(BaseModel):
+    email: EmailStr
+
+
+class ResetIn(BaseModel):
+    token: str = Field(min_length=10, max_length=200)
+    password: str = Field(min_length=10, max_length=256)
+
+
+class ChangePasswordIn(BaseModel):
+    current_password: str = Field(max_length=256)
+    new_password: str = Field(min_length=10, max_length=256)
+
+
+class DeleteAccountIn(BaseModel):
+    password: str = Field(max_length=256)
+    confirm: Literal["DELETE"]
+
+
+class SwitchOrgIn(BaseModel):
+    org_id: int
+
+
+class PlanOut(ORM):
+    id: str
+    name: str
+    description: str
+    monthly_scans: int
+    max_upload_mb: int
+    max_members: int
+    price_monthly_cents: int
+    currency: str
+    public: bool
+    sort: int
+
+
+class PlanIn(BaseModel):
+    id: str = Field(pattern=r"^[a-z0-9_-]{2,40}$")
+    name: str = Field(min_length=1, max_length=80)
+    description: str = Field(default="", max_length=300)
+    monthly_scans: int = Field(ge=-1)
+    max_upload_mb: int = Field(ge=1, le=2048)
+    max_members: int = Field(ge=1, le=10000)
+    price_monthly_cents: int = Field(ge=0)
+    currency: str = Field(default="usd", min_length=3, max_length=3)
+    public: bool = True
+    sort: int = 0
+
+
+class PlanPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    description: str | None = Field(default=None, max_length=300)
+    monthly_scans: int | None = Field(default=None, ge=-1)
+    max_upload_mb: int | None = Field(default=None, ge=1, le=2048)
+    max_members: int | None = Field(default=None, ge=1, le=10000)
+    price_monthly_cents: int | None = Field(default=None, ge=0)
+    public: bool | None = None
+    sort: int | None = None
+
+
+class MemberOut(BaseModel):
+    user_id: int
+    email: str
+    role: str
+    joined_at: UTCDateTime
+
+
+class InviteIn(BaseModel):
+    email: EmailStr
+    role: Literal["member", "admin"] = "member"
+
+
+class InviteOut(ORM):
+    id: int
+    email: str
+    role: str
+    expires_at: UTCDateTime
+    created_at: UTCDateTime
+
+
+class InvitePreview(BaseModel):
+    org_name: str
+    email: str
+    role: str
+    inviter: str | None
+
+
+class OrgOut(BaseModel):
+    id: int
+    name: str
+    kind: str
+    status: str
+    my_role: str
+    plan: PlanOut
+    usage: dict
+    seats_used: int
+    members: list[MemberOut]
+    invites: list[InviteOut]
+
+
+class OrgCreateIn(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+
+
+class OrgPatch(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+
+
+class MemberPatch(BaseModel):
+    role: Literal["member", "admin", "owner"]
+
+
+# ---------------------------------------------------------------- owner console
+
+class AdminUserOut(BaseModel):
+    id: int
+    email: str
+    role: str
+    status: str
+    email_verified: bool
+    created_at: UTCDateTime
+    last_login_at: UTCDateTime | None
+    workspaces: int
+    scans_this_month: int
+
+
+class AdminUserPatch(BaseModel):
+    status: Literal["active", "suspended"] | None = None
+    email_verified: bool | None = None
+
+
+class AdminOrgOut(BaseModel):
+    id: int
+    name: str
+    kind: str
+    status: str
+    plan_id: str
+    plan_name: str
+    credits: int
+    scan_quota_override: int | None
+    members: int
+    owner_email: str | None
+    usage: dict
+    created_at: UTCDateTime
+
+
+class AdminOrgPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    plan_id: str | None = None
+    status: Literal["active", "suspended"] | None = None
+    credits_delta: int | None = Field(default=None, ge=-1_000_000, le=1_000_000)
+    scan_quota_override: int | None = Field(default=None, ge=-1)
+    clear_quota_override: bool = False
+
+
+class PlatformSettingsIO(BaseModel):
+    signups_open: bool | None = None
+    require_email_verification: bool | None = None

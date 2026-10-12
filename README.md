@@ -24,7 +24,10 @@ uvicorn app.main:app --port 8000
 cd frontend && npm install && npm run dev        # → http://localhost:3000
 ```
 
-Register an account (the first user becomes admin), then drop a file or paste a URL on **Scan content**.
+Register an account. The first user becomes the **platform owner** and gets the **Owner console**. Everyone
+after that is a customer with their own login, a personal workspace on the Free plan, and optional team
+workspaces. Then drop a file or paste a URL on **Scan content**. In development, verification, reset and invite
+emails are written to `backend/data/outbox/` until you configure SMTP (`DS_SMTP_*`).
 To install the extension, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#local-development).
 
 ## What it does today
@@ -37,6 +40,9 @@ To install the extension, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#local-deve
 * Four-level classification (*Likely Authentic · Uncertain · Potentially Manipulated · High Risk*), reported
   separately from **synthetic origin**, with reliability, limitations and next steps
 * PDF and JSON evidence reports via signed links, history, investigations with notes, alerts, and an audit log
+* **SaaS accounts:** email verification, password reset, personal and team workspaces with invites and roles,
+  plans with monthly quotas and scan credits, a public pricing page, and an owner console to manage customers,
+  workspaces, plans and platform settings
 
 The heuristic detectors are honest but limited. On their own they will usually return **Uncertain** for
 sophisticated deepfakes. Plug in a trained model through the `ml_image` / `ml_audio` slots and calibrate it with
@@ -46,7 +52,7 @@ for exactly what is implemented, what needs configuration and what is planned.
 ## Tests
 
 ```bash
-cd backend && pytest -q          # 34 tests: API flows, SSRF guard, ensemble rules, detectors
+cd backend && pytest -q          # 47 tests: API flows, accounts/workspaces/quotas, SSRF guard, ensemble, detectors
 cd frontend && npm test && npm run typecheck && npm run build
 ```
 

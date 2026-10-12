@@ -20,7 +20,8 @@ def upload(client, headers, data: bytes, name: str):
 def test_register_login_and_roles(client):
     u = make_user(client)
     me = client.get(f"{API}/auth/me", headers=u["headers"]).json()
-    assert me["email"] == u["email"] and me["role"] in ("admin", "analyst")
+    assert me["email"] == u["email"] and me["role"] == "user" and me["email_verified"]
+    assert me["memberships"][0]["kind"] == "personal" and me["memberships"][0]["role"] == "owner"
     assert client.get(f"{API}/auth/me").status_code == 401
     bad = client.post(f"{API}/auth/login", json={"email": u["email"], "password": "wrong-password-123"})
     assert bad.status_code == 401

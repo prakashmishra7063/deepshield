@@ -30,21 +30,33 @@ def verify_password(password: str, stored: str) -> bool:
         return False
 
 
-def create_access_token(user_id: int) -> str:
+def create_access_token(user_id: int, version: int = 0) -> str:
     s = get_settings()
     now = datetime.now(timezone.utc)
-    payload = {"sub": str(user_id), "iat": now, "exp": now + timedelta(minutes=s.access_token_minutes), "typ": "access"}
+    payload = {"sub": str(user_id), "ver": version, "iat": now,
+               "exp": now + timedelta(minutes=s.access_token_minutes), "typ": "access"}
     return jwt.encode(payload, s.secret_key, algorithm="HS256")
 
 
-def decode_access_token(token: str) -> int | None:
+def decode_access_token(token: str) -> tuple[int, int] | None:
+    """Returns (user_id, token_version) for a valid access token."""
     try:
         payload = jwt.decode(token, get_settings().secret_key, algorithms=["HS256"])
         if payload.get("typ") != "access":
             return None
-        return int(payload["sub"])
+        return int(payload["sub"]), int(payload.get("ver", 0))
     except (jwt.PyJWTError, KeyError, ValueError):
         return None
+
+
+def new_secret_token() -> tuple[str, str]:
+    """Random URL-safe token for emailed links; returns (raw, sha256 hex)."""
+    raw = secrets.token_urlsafe(32)
+    return raw, hashlib.sha256(raw.encode()).hexdigest()
+
+
+def hash_secret_token(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 API_TOKEN_PREFIX = "dsk_"

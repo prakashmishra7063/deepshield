@@ -3,13 +3,61 @@
 
 export type Classification = "likely_authentic" | "uncertain" | "potentially_manipulated" | "high_risk";
 
+export interface MembershipInfo {
+  org_id: number;
+  name: string;
+  kind: "personal" | "team";
+  role: "owner" | "admin" | "member";
+  plan_id: string;
+}
+
 export interface User {
   id: number;
   email: string;
-  role: string;
+  role: "owner" | "user";
+  status: string;
+  email_verified: boolean;
   alert_threshold: string;
   email_alerts: boolean;
   created_at: string;
+  active_org_id: number | null;
+  memberships: MembershipInfo[];
+  require_email_verification: boolean;
+  email_delivery: "smtp" | "outbox" | "disabled";
+}
+
+export interface Plan {
+  id: string;
+  name: string;
+  description: string;
+  monthly_scans: number;
+  max_upload_mb: number;
+  max_members: number;
+  price_monthly_cents: number;
+  currency: string;
+  public: boolean;
+  sort: number;
+}
+
+export interface Usage {
+  used: number;
+  limit: number;
+  credits: number;
+  remaining_in_plan: number | null;
+  period_start: string;
+}
+
+export interface Org {
+  id: number;
+  name: string;
+  kind: "personal" | "team";
+  status: "active" | "suspended";
+  my_role: "owner" | "admin" | "member";
+  plan: Plan;
+  usage: Usage;
+  seats_used: number;
+  members: { user_id: number; email: string; role: string; joined_at: string }[];
+  invites: { id: number; email: string; role: string; expires_at: string; created_at: string }[];
 }
 
 export interface Signal {

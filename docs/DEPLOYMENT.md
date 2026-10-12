@@ -65,3 +65,21 @@ reverse proxy (Caddy, nginx, Azure Front Door) in front of `web:3000`.
 - [ ] Backups for the database. Media is intentionally short-lived
 - [ ] Review `docs/PRIVACY_AND_RESPONSIBLE_USE.md` with counsel for your jurisdictions
 - [ ] Before enabling any ML model, run `evaluation/evaluate.py` on an independent dataset with subgroup columns and review the per-group error rates
+
+## Email (required for real customers)
+
+DeepShield sends verification, password-reset, invitation and alert emails over SMTP. Until
+`DS_SMTP_HOST` and `DS_SMTP_FROM` are set, development servers **don't send anything**. Each
+message is saved to `backend/data/outbox/` instead, and the owner console (**Settings → Email
+delivery**) says so. In production (`DS_ENV=production`) nothing is saved; sending fails with a clear error instead.
+
+Add the settings to `backend/.env`, restart the API, then use **Owner console → Settings → Send
+test email to me**.
+
+| Provider | Settings |
+|---|---|
+| **Gmail** (testing or very small volume) | `DS_SMTP_HOST=smtp.gmail.com`, `DS_SMTP_PORT=465`, `DS_SMTP_USER=you@gmail.com`, `DS_SMTP_PASSWORD=<16-character App Password>`, `DS_SMTP_FROM=DeepShield AI <you@gmail.com>`. Create the App Password at myaccount.google.com → Security → 2-Step Verification → App passwords. Your normal Gmail password won't work, and Gmail caps sending at a few hundred messages a day |
+| **Resend / SendGrid / Brevo / Amazon SES / Mailgun** (recommended for selling) | Use the SMTP host, port (587 or 465), username and API key they give you, and a `DS_SMTP_FROM` address on **your own domain** with the provider's SPF/DKIM DNS records added, so mail isn't marked as spam |
+
+Also set `DS_APP_URL` to the public address of the web app (e.g. `https://app.yourdomain.com`), so
+links in emails open the right site.

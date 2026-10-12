@@ -3,15 +3,18 @@
 import { Link2, UploadCloud } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, type DragEvent, type FormEvent } from "react";
+import { useUser } from "./AppShell";
 import { api, uploadFile, type Analysis } from "@/lib/api";
 import { fmtBytes } from "@/lib/format";
 import { Button, Card, ErrorNote, Progress, cx, inputCls } from "./ui";
 
 const ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff,video/mp4,video/quicktime,video/webm,video/x-msvideo,audio/wav,audio/x-wav,audio/mpeg,audio/mp4,audio/ogg,audio/flac";
-const MAX_MB = 100;
+const SERVER_MAX_MB = 100;
 
 export default function QuickScan({ large = false }: { large?: boolean }) {
   const router = useRouter();
+  const { org } = useUser();
+  const MAX_MB = Math.min(org?.plan.max_upload_mb ?? SERVER_MAX_MB, SERVER_MAX_MB);
   const input = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
   const [url, setUrl] = useState("");
@@ -23,7 +26,7 @@ export default function QuickScan({ large = false }: { large?: boolean }) {
   const send = async (f: File) => {
     setError(null);
     if (f.size > MAX_MB * 1024 * 1024) {
-      setError(`That file is ${fmtBytes(f.size)}. The upload limit is ${MAX_MB} MB.`);
+      setError(`That file is ${fmtBytes(f.size)}. Your ${org?.plan.name ?? ""} plan allows files up to ${MAX_MB} MB.`);
       return;
     }
     setFile(f);

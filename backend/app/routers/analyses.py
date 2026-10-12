@@ -9,9 +9,10 @@ from .. import storage
 from ..audit import audit
 from ..config import get_settings
 from ..db import get_db
-from ..deps import get_current_user
+from ..billing import charge_scan, check_can_scan, upload_limit_mb
+from ..deps import Ctx, get_ctx, require_verified
 from ..detection.sniff import sniff
-from ..models import Alert, Analysis, Case, User
+from ..models import Alert, Analysis, Case, Membership
 from ..netguard import FetchError, validate_url
 from ..pipeline import store_media
 from ..ratelimit import limiter
@@ -35,27 +36,30 @@ def detail(a: Analysis) -> AnalysisOut:
     return out
 
 
-def owned(db: Session, user: User, analysis_id: str) -> Analysis:
+def owned(db: Session, ctx: Ctx, analysis_id: str) -> Analysis:
+    """An analysis in the caller's active workspace (404 otherwise, so IDs can't be probed)."""
     a = db.get(Analysis, analysis_id)
-    if not a or a.user_id != user.id:
+    if not a or a.org_id != ctx.org.id:
         raise HTTPException(404, "Analysis not found")
     return a
 
 
-def _scan_quota(user: User) -> None:
-    limiter.check(f"scan:{user.id}", get_settings().scan_rate_limit_per_hour, 3600)
+def _scan_rate(ctx: Ctx) -> None:
+    limiter.check(f"scan:{ctx.user.id}", get_settings().scan_rate_limit_per_hour, 3600)
 
 
 @router.post("/analyses/upload", response_model=AnalysisOut, status_code=202)
-async def upload(request: Request, file: UploadFile = File(...), user: User = Depends(get_current_user),
+async def upload(request: Request, file: UploadFile = File(...), ctx: Ctx = Depends(require_verified),
                  db: Session = Depends(get_db)):
-    _scan_quota(user)
-    limit = get_settings().max_upload_mb * 1024 * 1024
+    _scan_rate(ctx)
+    quota = check_can_scan(db, ctx.org)
+    limit_mb = upload_limit_mb(ctx.org)
+    limit = limit_mb * 1024 * 1024
     buf = bytearray()
     while chunk := await file.read(1024 * 1024):
         buf.extend(chunk)
         if len(buf) > limit:
-            raise HTTPException(413, f"File exceeds the {get_settings().max_upload_mb} MB upload limit")
+            raise HTTPException(413, f"File exceeds the {limit_mb} MB upload limit of the {ctx.org.plan.name} plan")
     if not buf:
         raise HTTPException(400, "Empty file")
     sn = sniff(bytes(buf[:64]))
@@ -65,38 +69,41 @@ async def upload(request: Request, file: UploadFile = File(...), user: User = De
     if not sn.supported:
         raise HTTPException(415, f"{sn.mime} is not supported yet. {sn.note or ''}".strip())
     media = store_media(db, bytes(buf), kind=sn.kind, mime=sn.mime, name=(file.filename or "upload")[-255:])
-    a = Analysis(user_id=user.id, source_type="upload", media_id=media.id, kind=sn.kind)
+    a = Analysis(org_id=ctx.org.id, user_id=ctx.user.id, source_type="upload", media_id=media.id, kind=sn.kind)
     db.add(a)
+    charge_scan(db, ctx.org, quota)
     db.commit()
-    audit(db, "analysis.create", user_id=user.id, target=a.id, request=request,
+    audit(db, "analysis.create", user_id=ctx.user.id, target=a.id, request=request,
           detail={"source": "upload", "kind": sn.kind, "size": len(buf)})
     jobs.enqueue(a.id)
     return detail(a)
 
 
 @router.post("/analyses/url", response_model=AnalysisOut, status_code=202)
-def scan_url(body: UrlScanIn, request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _scan_quota(user)
+def scan_url(body: UrlScanIn, request: Request, ctx: Ctx = Depends(require_verified), db: Session = Depends(get_db)):
+    _scan_rate(ctx)
+    quota = check_can_scan(db, ctx.org)
     try:
         url = validate_url(body.url)
     except FetchError as e:
         raise HTTPException(400, str(e))
     page_url = body.page_url if body.page_url and body.page_url.startswith(("http://", "https://")) else None
     source = "extension" if getattr(request.state, "via_api_token", False) or body.source == "extension" else "url"
-    a = Analysis(user_id=user.id, source_type=source, source_url=url, page_url=page_url)
+    a = Analysis(org_id=ctx.org.id, user_id=ctx.user.id, source_type=source, source_url=url, page_url=page_url)
     db.add(a)
+    charge_scan(db, ctx.org, quota)
     db.commit()
-    audit(db, "analysis.create", user_id=user.id, target=a.id, request=request, detail={"source": source})
+    audit(db, "analysis.create", user_id=ctx.user.id, target=a.id, request=request, detail={"source": source})
     jobs.enqueue(a.id)
     return detail(a)
 
 
 @router.get("/analyses", response_model=Page)
-def history(user: User = Depends(get_current_user), db: Session = Depends(get_db),
+def history(ctx: Ctx = Depends(get_ctx), db: Session = Depends(get_db),
             page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
             classification: str | None = None, kind: str | None = None, status: str | None = None,
             q: str | None = Query(None, max_length=200)):
-    stmt = select(Analysis).where(Analysis.user_id == user.id)
+    stmt = select(Analysis).where(Analysis.org_id == ctx.org.id)
     if classification:
         stmt = stmt.where(Analysis.classification == classification)
     if kind:
@@ -112,14 +119,16 @@ def history(user: User = Depends(get_current_user), db: Session = Depends(get_db
 
 
 @router.get("/analyses/{analysis_id}", response_model=AnalysisOut)
-def get_analysis(analysis_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return detail(owned(db, user, analysis_id))
+def get_analysis(analysis_id: str, ctx: Ctx = Depends(get_ctx), db: Session = Depends(get_db)):
+    return detail(owned(db, ctx, analysis_id))
 
 
 @router.delete("/analyses/{analysis_id}", status_code=204)
-def delete_analysis(analysis_id: str, request: Request, user: User = Depends(get_current_user),
+def delete_analysis(analysis_id: str, request: Request, ctx: Ctx = Depends(get_ctx),
                     db: Session = Depends(get_db)):
-    a = owned(db, user, analysis_id)
+    a = owned(db, ctx, analysis_id)
+    if ctx.role == "member" and a.user_id != ctx.user.id:
+        raise HTTPException(403, "Only workspace admins can delete analyses created by others")
     if a.status in ("queued", "running"):
         raise HTTPException(409, "Wait for the analysis to finish before deleting it")
     media = a.media
@@ -130,12 +139,12 @@ def delete_analysis(analysis_id: str, request: Request, user: User = Depends(get
         db.delete(media)
     db.commit()
     storage.delete_derived(analysis_id)
-    audit(db, "analysis.delete", user_id=user.id, target=analysis_id, request=request)
+    audit(db, "analysis.delete", user_id=ctx.user.id, target=analysis_id, request=request)
 
 
 @router.get("/analyses/{analysis_id}/evidence/{name}")
-def evidence(analysis_id: str, name: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    owned(db, user, analysis_id)
+def evidence(analysis_id: str, name: str, ctx: Ctx = Depends(get_ctx), db: Session = Depends(get_db)):
+    owned(db, ctx, analysis_id)
     path = storage.derived_file(analysis_id, name)
     if not path or path.suffix.lower() not in (".png", ".jpg"):
         raise HTTPException(404, "Evidence not found")
@@ -144,13 +153,13 @@ def evidence(analysis_id: str, name: str, user: User = Depends(get_current_user)
 
 
 @router.post("/analyses/{analysis_id}/report-link", response_model=ReportLinkOut)
-def report_link(analysis_id: str, body: ReportLinkIn, request: Request, user: User = Depends(get_current_user),
+def report_link(analysis_id: str, body: ReportLinkIn, request: Request, ctx: Ctx = Depends(get_ctx),
                 db: Session = Depends(get_db)):
-    a = owned(db, user, analysis_id)
+    a = owned(db, ctx, analysis_id)
     if a.status not in ("completed", "failed"):
         raise HTTPException(409, "The report is available once the analysis has finished")
-    token = sign_report_link(a.id, user.id, body.format)
-    audit(db, "report.link", user_id=user.id, target=a.id, request=request, detail={"format": body.format})
+    token = sign_report_link(a.id, ctx.user.id, body.format)
+    audit(db, "report.link", user_id=ctx.user.id, target=a.id, request=request, detail={"format": body.format})
     return ReportLinkOut(url=f"/api/v1/reports/{token}", expires_in=get_settings().report_link_minutes * 60)
 
 
@@ -160,7 +169,8 @@ def download_report(token: str, db: Session = Depends(get_db)):
     if not data:
         raise HTTPException(403, "This report link is invalid or has expired")
     a = db.get(Analysis, data["a"])
-    if not a or a.user_id != data["u"]:
+    # The signer must still belong to the analysis's workspace.
+    if not a or not db.get(Membership, (a.org_id, data["u"])):
         raise HTTPException(404, "Report not found")
     headers = {"Cache-Control": "no-store", "X-Robots-Tag": "noindex"}
     if data["f"] == "json":
@@ -171,10 +181,10 @@ def download_report(token: str, db: Session = Depends(get_db)):
 
 
 @router.get("/dashboard/summary")
-def dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    base = select(Analysis).where(Analysis.user_id == user.id)
+def dashboard(ctx: Ctx = Depends(get_ctx), db: Session = Depends(get_db)):
+    base = select(Analysis).where(Analysis.org_id == ctx.org.id)
     rows = db.execute(select(Analysis.classification, Analysis.kind, Analysis.status, Analysis.created_at)
-                      .where(Analysis.user_id == user.id)).all()
+                      .where(Analysis.org_id == ctx.org.id)).all()
     by_class: dict[str, int] = {}
     by_kind: dict[str, int] = {}
     trend: dict[str, dict[str, int]] = {}
@@ -188,8 +198,8 @@ def dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_
             if cls in ("potentially_manipulated", "high_risk"):
                 d["flagged"] += 1
     recent = db.scalars(base.order_by(Analysis.created_at.desc()).limit(8)).all()
-    open_cases = db.scalar(select(func.count(Case.id)).where(Case.user_id == user.id, Case.status == "open"))
-    new_alerts = db.scalar(select(func.count(Alert.id)).where(Alert.user_id == user.id, Alert.state == "new"))
+    open_cases = db.scalar(select(func.count(Case.id)).where(Case.org_id == ctx.org.id, Case.status == "open"))
+    new_alerts = db.scalar(select(func.count(Alert.id)).where(Alert.user_id == ctx.user.id, Alert.state == "new"))
     return {
         "total": len(rows),
         "completed": sum(by_class.values()),

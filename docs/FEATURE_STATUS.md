@@ -27,7 +27,13 @@ DeepShield never presents simulated results as real detections. Anything below m
 
 | Capability | Status |
 |---|---|
-| Registration and login (scrypt, JWT), first user becomes admin, RBAC on admin routes | ✅ |
+| Registration and login (scrypt, JWT). The first user becomes the **platform owner** | ✅ |
+| Email verification before scanning, forgot/reset password, change password, sign out everywhere, self-service account deletion | ✅ (dev: emails go to `backend/data/outbox/` until SMTP is set) |
+| Workspaces: a personal workspace per user, plus team workspaces with owner/admin/member roles, email invites, a workspace switcher and seat limits | ✅ |
+| Plans (Free / Pro / Business / Internal), monthly scan quotas, per-plan upload limits, pay-per-scan credits | ✅ Enforced |
+| Owner console: overview, customers (suspend, verify, reset, sign out, delete), workspaces (plan, quota, credits, suspend), plans editor, platform settings (open sign-ups, require verification), audit log | ✅ Shows metadata only, never customers' media or results |
+| Public pricing page | ✅ |
+| Online payments (Stripe checkout, subscriptions, invoices, credit packs) | 🗓 Next step. Needs Stripe keys. Until then the owner assigns plans and credits manually |
 | API tokens (hashed, revocable, can't mint new tokens) | ✅ |
 | Upload and URL scanning with background job queue, progress and crash recovery | ✅ |
 | SSRF-safe fetcher (public IPs only, pinned connections, re-validated redirects, size and time caps) | ✅ |
@@ -39,7 +45,7 @@ DeepShield never presents simulated results as real detections. Anything below m
 | Browser notifications | ✅ (extension) |
 | Dashboard: totals, flagged, trend, content types, recent, model availability | ✅ |
 | Integrations registry page | ✅ |
-| Audit log (auth, tokens, scans, deletes, report links, cases) and admin stats | ✅ API. No admin UI page yet |
+| Audit log (auth, tokens, scans, deletes, report links, cases, owner actions) | ✅ In the owner console |
 | Retention purge of originals | ✅ |
 | Rate limiting | ✅ In-process. Use Redis for multiple replicas |
 | Dark and light themes, responsive layout, keyboard and screen-reader basics | ✅ |
@@ -58,4 +64,4 @@ DeepShield never presents simulated results as real detections. Anything below m
 ## Later phases (not implemented)
 
 * **Phase 4, identity protection:** consent-based face and voice reference enrollment, authorized URL watchlists, impersonation evidence packages.
-* **Phase 5, enterprise:** organizations and multi-user tenancy, SIEM/webhook export, admin console UI, SSO.
+* **Phase 5, enterprise:** SSO/SAML, two-factor login, SIEM/webhook export, Stripe billing.

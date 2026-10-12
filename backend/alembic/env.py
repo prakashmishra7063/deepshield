@@ -9,7 +9,8 @@ from app.db import Base
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)
-if config.config_file_name is not None:
+# Skip when run from the app (app.migrate) so the server's logging setup is preserved.
+if config.config_file_name is not None and not config.attributes.get("skip_logging_config"):
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata

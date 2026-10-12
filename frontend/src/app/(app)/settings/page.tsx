@@ -4,7 +4,7 @@ import { Copy, KeyRound } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { PageHeader, useUser } from "@/components/AppShell";
 import { Button, Card, ErrorNote, Field, Pill, inputCls } from "@/components/ui";
-import { api, type ApiToken, type User } from "@/lib/api";
+import { api, auth, type ApiToken, type User } from "@/lib/api";
 import { fmtDate } from "@/lib/format";
 
 export default function SettingsPage() {
@@ -111,6 +111,101 @@ export default function SettingsPage() {
           </ul>
         </Card>
       </div>
+      <AccountSecurity />
     </>
+  );
+}
+
+function AccountSecurity() {
+  const { user } = useUser();
+  const [cur, setCur] = useState("");
+  const [next, setNext] = useState("");
+  const [delPw, setDelPw] = useState("");
+  const [delText, setDelText] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const change = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setMsg(null);
+    try {
+      const r = await api<{ access_token: string }>("/auth/change-password", {
+        method: "POST",
+        json: { current_password: cur, new_password: next },
+      });
+      auth.set(r.access_token);
+      setCur("");
+      setNext("");
+      setMsg("Password changed. Other sessions were signed out.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not change password");
+    }
+  };
+
+  const everywhere = async () => {
+    if (!confirm("Sign out of every browser and device, including this one?")) return;
+    await api("/auth/logout-everywhere", { method: "POST" });
+    auth.clear();
+    window.location.assign("/login");
+  };
+
+  const remove = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      await api("/auth/me", { method: "DELETE", json: { password: delPw, confirm: delText } });
+      auth.clear();
+      window.location.assign("/register");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete account");
+    }
+  };
+
+  return (
+    <div className="mt-6 grid gap-6 lg:grid-cols-2">
+      <Card title="Password & sessions">
+        <form onSubmit={change} className="space-y-3">
+          <Field label="Current password">
+            <input className={inputCls} type="password" autoComplete="current-password" value={cur} onChange={(e) => setCur(e.target.value)} required />
+          </Field>
+          <Field label="New password" hint="At least 10 characters.">
+            <input className={inputCls} type="password" autoComplete="new-password" minLength={10} value={next} onChange={(e) => setNext(e.target.value)} required />
+          </Field>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit">Change password</Button>
+            <Button type="button" variant="secondary" onClick={everywhere}>
+              Sign out everywhere
+            </Button>
+          </div>
+        </form>
+        {msg && (
+          <p className="mt-3 text-xs text-ok" role="status">
+            {msg}
+          </p>
+        )}
+      </Card>
+      <Card title="Delete account">
+        <form onSubmit={remove} className="space-y-3">
+          <p className="text-sm text-muted">
+            Permanently deletes your account and your personal workspace, including its scans, evidence and stored
+            media. Team workspaces keep the work you contributed. This can&apos;t be undone.
+          </p>
+          <Field label="Password">
+            <input className={inputCls} type="password" autoComplete="current-password" value={delPw} onChange={(e) => setDelPw(e.target.value)} required />
+          </Field>
+          <Field label='Type "DELETE" to confirm'>
+            <input className={inputCls} value={delText} onChange={(e) => setDelText(e.target.value)} required />
+          </Field>
+          <Button type="submit" variant="danger" disabled={delText !== "DELETE" || user?.role === "owner"}>
+            Delete my account
+          </Button>
+          {user?.role === "owner" && <p className="text-xs text-muted">Platform owners must hand ownership to another user first.</p>}
+        </form>
+      </Card>
+      <div className="lg:col-span-2">
+        <ErrorNote message={error} />
+      </div>
+    </div>
   );
 }

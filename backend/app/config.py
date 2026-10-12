@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/deepshield.db"
     storage_dir: Path = Path("./data/storage")
     cors_origins: str = "http://localhost:3000"
+    # Public URL of the web app, used in emails (verification, password reset, invites).
+    app_url: str = "http://localhost:3100"
+    product_name: str = "DeepShield AI"
 
     access_token_minutes: int = 60
     report_link_minutes: int = 10
@@ -41,6 +44,12 @@ class Settings(BaseSettings):
     smtp_user: str | None = None
     smtp_password: str | None = None
     smtp_from: str | None = None
+    smtp_starttls: bool = True  # ignored on port 465 (implicit TLS)
+    # Without SMTP, emails are written here so links can be followed during development.
+    outbox_dir: Path = Path("./data/outbox")
+    verification_hours: int = 48
+    reset_minutes: int = 60
+    invite_days: int = 7
 
     @property
     def cors_origin_list(self) -> list[str]:
