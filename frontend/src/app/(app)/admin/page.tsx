@@ -564,7 +564,8 @@ function EmailCard() {
                   (in <span className="break-all font-mono text-xs">{st.outbox_dir}</span>)
                 </>
               )}
-              . Until this is set up, customers can&apos;t verify themselves; you can verify them from the Customers tab.
+              . Until this is set up, email verification is paused so nobody gets locked out. It switches back on
+              automatically once email works.
             </p>
             <p className="mt-2">
               To fix it, add your email provider&apos;s SMTP settings (<span className="font-mono">DS_SMTP_HOST</span>,{" "}
@@ -624,7 +625,10 @@ function SettingsTab() {
           <input type="checkbox" className="mt-1" checked={s.require_email_verification} onChange={(e) => save({ require_email_verification: e.target.checked })} />
           <span>
             <span className="font-medium">Require email verification before scanning</span>
-            <span className="block text-muted">Recommended. Stops throwaway accounts from using your scan capacity.</span>
+            <span className="block text-muted">
+              Recommended. Stops throwaway accounts from using your scan capacity. Only enforced while email delivery is
+              connected.
+            </span>
           </span>
         </label>
         <ErrorNote message={error} />

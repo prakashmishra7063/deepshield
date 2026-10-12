@@ -246,7 +246,7 @@ def patch_platform_settings(body: PlatformSettingsIO, request: Request, owner: U
 def email_status() -> dict:
     from ..config import get_settings
     s = get_settings()
-    return {"delivery": mailer.delivery_mode(), "host": s.smtp_host, "port": s.smtp_port, "from": s.smtp_from,
+    return {"delivery": mailer.delivery_mode(), "verification_paused": mailer.delivery_mode() != "smtp", "host": s.smtp_host, "port": s.smtp_port, "from": s.smtp_from,
             "app_url": s.app_url, "outbox_dir": str(s.outbox_dir.resolve()) if mailer.delivery_mode() == "outbox" else None}
 
 

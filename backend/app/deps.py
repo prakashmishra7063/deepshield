@@ -5,7 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .billing import setting
+from .billing import verification_enforced
 from .config import get_settings
 from .db import get_db
 from .models import ApiToken, Membership, Organization, User, utcnow
@@ -91,7 +91,7 @@ def require_org_admin(ctx: Ctx = Depends(get_ctx)) -> Ctx:
 
 
 def require_verified(ctx: Ctx = Depends(get_ctx), db: Session = Depends(get_db)) -> Ctx:
-    if setting(db, "require_email_verification") and not ctx.user.email_verified_at:
+    if verification_enforced(db) and not ctx.user.email_verified_at:
         raise HTTPException(403, "Please verify your email address before scanning. Check your inbox or resend the "
                                  "verification email from the banner.")
     return ctx

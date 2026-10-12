@@ -45,6 +45,14 @@ def setting(db: Session, key: str):
     return row.value if row else DEFAULT_SETTINGS.get(key)
 
 
+def verification_enforced(db: Session) -> bool:
+    """Email verification is only required when this server can actually deliver the email.
+    Without SMTP nobody could ever verify, so the requirement is paused (and resumes
+    automatically once SMTP is configured)."""
+    from . import mailer
+    return bool(setting(db, "require_email_verification")) and mailer.delivery_mode() == "smtp"
+
+
 def month_start(now: datetime | None = None) -> datetime:
     now = now or datetime.now(timezone.utc)
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)

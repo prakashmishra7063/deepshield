@@ -21,8 +21,12 @@ def test_owner_is_first_user_and_auto_verified(client, owner):
     assert active_org(client, owner["headers"])["plan"]["id"] == "internal"
 
 
-def test_unverified_users_cannot_scan_until_verified(client):
+def test_unverified_users_cannot_scan_until_verified(client, monkeypatch):
     u = make_user(client, verify=False)
+    # Without SMTP the requirement is paused (nobody could verify); prove that first.
+    assert client.get(f"{API}/auth/me", headers=u["headers"]).json()["require_email_verification"] is False
+    from app import mailer
+    monkeypatch.setattr(mailer, "delivery_mode", lambda: "smtp")
     assert client.get(f"{API}/auth/me", headers=u["headers"]).json()["email_verified"] is False
     assert upload(client, u["headers"]).status_code == 403
     token = outbox_token(u["email"], "verify-email")

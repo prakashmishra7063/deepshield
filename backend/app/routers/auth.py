@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from .. import accounts, mailer
 from ..audit import audit
-from ..billing import setting
+from ..billing import setting, verification_enforced
 from ..config import get_settings
 from ..db import get_db
 from ..deps import get_current_user
@@ -31,7 +31,7 @@ def me_out(db: Session, user: User) -> MeOut:
                  email_alerts=user.email_alerts, created_at=user.created_at, active_org_id=user.active_org_id,
                  memberships=[MembershipOut(org_id=m.org_id, name=m.org.name, kind=m.org.kind, role=m.role,
                                             plan_id=m.org.plan_id) for m in ms],
-                 require_email_verification=bool(setting(db, "require_email_verification")),
+                 require_email_verification=verification_enforced(db),
                  email_delivery=mailer.delivery_mode())
 
 
