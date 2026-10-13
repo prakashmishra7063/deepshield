@@ -56,9 +56,18 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 
+def normalize_database_url(url: str) -> str:
+    """Hosting providers hand out postgres:// or postgresql:// URLs; use the psycopg 3 driver."""
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
 @lru_cache
 def get_settings() -> Settings:
     s = Settings()
+    s.database_url = normalize_database_url(s.database_url)
     if s.env == "production" and (s.secret_key.startswith("change-me") or len(s.secret_key) < 32):
         raise RuntimeError("DS_SECRET_KEY must be set to a random value of 32+ characters in production")
     if s.env == "production" and s.allow_private_fetch:

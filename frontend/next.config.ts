@@ -2,7 +2,9 @@ import type { NextConfig } from "next";
 
 // The browser talks to the API through this same-origin proxy, so no CORS and
 // signed report links work as plain downloads.
-const API_ORIGIN = process.env.API_ORIGIN ?? "http://127.0.0.1:8000";
+// Accepts a full URL or a bare host:port (as Render's private-network references provide).
+const rawOrigin = process.env.API_ORIGIN ?? "http://127.0.0.1:8000";
+const API_ORIGIN = (/^https?:\/\//.test(rawOrigin) ? rawOrigin : `http://${rawOrigin}`).replace(/\/$/, "");
 
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },

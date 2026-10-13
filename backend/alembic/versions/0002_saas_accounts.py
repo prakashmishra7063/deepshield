@@ -42,7 +42,13 @@ def _batch(table: str):
 
 
 def _user_fk_name(table: str) -> str:
-    return f"fk_{table}_user_id_users" if _is_sqlite() else f"{table}_user_id_fkey"
+    if _is_sqlite():
+        return f"fk_{table}_user_id_users"
+    # Other databases: read the real constraint name rather than assuming the default.
+    for fk in sa.inspect(op.get_bind()).get_foreign_keys(table):
+        if fk.get("constrained_columns") == ["user_id"] and fk.get("referred_table") == "users" and fk.get("name"):
+            return fk["name"]
+    return f"{table}_user_id_fkey"
 
 
 def upgrade() -> None:

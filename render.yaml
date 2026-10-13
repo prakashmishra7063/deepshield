@@ -1,0 +1,75 @@
+# Render Blueprint: New → Blueprint → pick this repo → Apply.
+# Creates the API, the website, a PostgreSQL database and a persistent disk for media.
+# Values marked `sync: false` are asked for in the Render dashboard (never commit secrets).
+# Plans and prices change; check render.com/pricing. The API needs a paid plan for the disk.
+
+databases:
+  - name: deepshield-db
+    databaseName: deepshield
+    user: deepshield
+    plan: basic-256mb
+    region: singapore          # closest to India; use frankfurt / ohio / oregon for other markets
+
+services:
+  - type: web
+    name: deepshield-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: standard             # 2 GB RAM: video analysis needs it (starter = 512 MB is too small)
+    region: singapore
+    numInstances: 1            # the job queue and rate limiter are in-process: keep exactly one instance
+    healthCheckPath: /api/v1/system/health
+    autoDeploy: true
+    disk:
+      name: media
+      mountPath: /data
+      sizeGB: 10
+    envVars:
+      - key: DS_ENV
+        value: production
+      - key: DS_SECRET_KEY
+        generateValue: true    # Render creates a long random secret
+      - key: DS_DATABASE_URL
+        fromDatabase:
+          name: deepshield-db
+          property: connectionString
+      - key: DS_STORAGE_DIR
+        value: /data/storage
+      - key: DS_RETENTION_HOURS
+        value: "24"
+      - key: DS_WORKER_THREADS
+        value: "2"
+      # Public address of the website, used in emailed links. Set after the first deploy,
+      # e.g. https://deepshield-web.onrender.com, later https://app.yourdomain.com
+      - key: DS_APP_URL
+        sync: false
+      - key: DS_CORS_ORIGINS
+        sync: false
+      # Email provider (e.g. Resend: host smtp.resend.com, port 465, user "resend", password = API key)
+      - key: DS_SMTP_HOST
+        sync: false
+      - key: DS_SMTP_PORT
+        value: "465"
+      - key: DS_SMTP_USER
+        sync: false
+      - key: DS_SMTP_PASSWORD
+        sync: false
+      - key: DS_SMTP_FROM
+        sync: false
+
+  - type: web
+    name: deepshield-web
+    runtime: docker
+    rootDir: frontend
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    region: singapore
+    autoDeploy: true
+    envVars:
+      # The website proxies /api to the API over Render's private network (read at build time).
+      - key: API_ORIGIN
+        fromService:
+          type: web
+          name: deepshield-api
+          property: hostport

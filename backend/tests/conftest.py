@@ -9,7 +9,8 @@ import pytest
 from PIL import Image
 
 _tmp = tempfile.mkdtemp(prefix="deepshield-test-")
-os.environ["DS_DATABASE_URL"] = f"sqlite:///{_tmp}/test.db"
+# DS_TEST_DATABASE_URL runs the suite against another database (e.g. a throwaway Postgres).
+os.environ["DS_DATABASE_URL"] = os.environ.get("DS_TEST_DATABASE_URL") or f"sqlite:///{_tmp}/test.db"
 os.environ["DS_STORAGE_DIR"] = f"{_tmp}/storage"
 os.environ["DS_SECRET_KEY"] = "test-secret-key-test-secret-key-0123456789"
 os.environ["DS_WORKER_THREADS"] = "2"
